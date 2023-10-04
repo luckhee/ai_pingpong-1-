@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Teachable Machine Ping Pong</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8/dist/teachablemachine-pose.min.js"></script>
+</head>
+<body>
+  <h1>Teachable Machine Ping Pong</h1>
+  <button onclick="init()">Start Game</button>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="score">Player Score: 0 | CPU Score: 0</div>
+
+  <script>
+    // Initialize variables
+    let paddleY = 250, ballX = 50, ballY = 50, ballSpeedX = 5, ballSpeedY = 3;
+    let model, webcam, maxPredictions;
+    let playerScore = 0, cpuScore = 0;
+    let cpuPaddleY = 250;
+
+    // Define your model path here
+    const URL = "./my-pose-model/";
+    let paddleImage = new Image();
+    paddleImage.src = './raket.png';  // Replace this with your actual image path
+
+    async function init() {
+      const modelURL = URL + "model.json";
+      const metadataURL = URL + "metadata.json";
+
+      // Initialize Teachable Machine
+      model = await tmPose.load(modelURL, metadataURL);
+      maxPredictions = model.getTotalClasses();
+
+      const size = 200;
+      webcam = new tmPose.Webcam(size, size, true);  // width, height, flip
+      await webcam.setup();
+      await webcam.play();
+
+      window.requestAnimationFrame(gameLoop);
+    }
+
+    async function gameLoop() {
+      // Update Teachable Machine
+      webcam.update();
+      const { pose, posenetOutput } = await model.estimatePose(webcam.canvas);
+      const prediction = await model.predict(posenetOutput);
+
+      // Player control with Teachable Machine
+      for(let i = 0; i < maxPredictions; i++) {
+        const className = prediction[i].className;
+        const probability = prediction[i].probability.toFixed(2);
+
+        if(className === "up" && probability > 0.75) {
+          paddleY = Math.max(0, paddleY - 10);
+        }
+        else if(className === "down" && probability > 0.75) {
+          paddleY = Math.min(500, paddleY + 10);
+        }
+      }
+
+      // Ball physics
+      ballX += ballSpeedX;
+      ballY += ballSpeedY;
+
+      if(ballY < 0 || ballY > 600) ballSpeedY = -ballSpeedY;
+
+      if(ballX < 0) {
+        if(ballY > paddleY && ballY < paddleY + 100) {
+          ballSpeedX = -ballSpeedX;
+          playerScore++;
+        }
+        else {
+          cpuScore++;
+          resetBall();
+        }
+      }
+      
+      if(ballX > 800) {
+        if(ballY > cpuPaddleY && ballY < cpuPaddleY + 100) {
+          ballSpeedX = -ballSpeedX;
+        }
+        else {
+          playerScore++;
+          resetBall();
+        }
+      }
+
+      // Simple AI for CPU
+      cpuPaddleY = ballY - 50;
+
+      // Drawing
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+
+      // Draw background
+      ctx.fillStyle = "green";
+      ctx.fillRect(0, 0, 800, 600);
+
+      // Draw table lines
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(400, 0);
+      ctx.lineTo(400, 600);
+      ctx.stroke();
+
+      // Draw the net
+      ctx.fillStyle = "white";
+      ctx.fillRect(395, 290, 10, 20);
+
+      // Draw paddles using the image
+      ctx.drawImage(paddleImage, 0, paddleY, 10, 100);
+      ctx.drawImage(paddleImage, 790, cpuPaddleY, 10, 100);
+
+      // Draw ball
+      ctx.beginPath();
+      ctx.arc(ballX, ballY, 10, 0, Math.PI*2);
+      ctx.fillStyle = "white";
+      ctx.fill();
+      ctx.closePath();
+
+      // Update Score
+      document.getElementById("score").innerText = "Player Score: " + playerScore + " | CPU Score: " + cpuScore;
+
+      window.requestAnimationFrame(gameLoop);
+    }
+
+    function resetBall() {
+      ballX = 400;
+      ballY = 300;
+      ballSpeedX = -ballSpeedX;
+    }
+  </script>
+</body>
+</html>

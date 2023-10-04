@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Teachable Machine Ping Pong</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8/dist/teachablemachine-pose.min.js"></script>
+</head>
+<body>
+  <h1>Teachable Machine Ping Pong</h1>
+  <button onclick="init()">Start Game</button>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="score">Player Score: 0 | CPU Score: 0</div>
+
+  <script>
+    let ballX = 50, ballY = 50, ballSpeedX = 10, ballSpeedY = 6;
+    let model, webcam, maxPredictions;
+    let playerScore = 0, cpuScore = 0;
+    let cpuPaddleY = 250;
+    let hitBall = false;
+    let paddleY = 250;
+
+    const URL = "./my-pose-model/";
+    let paddleImage = new Image();
+    paddleImage.src = './raket.png';
+
+    async function init() {
+      const modelURL = URL + "model.json";
+      const metadataURL = URL + "metadata.json";
+
+      model = await tmPose.load(modelURL, metadataURL);
+      maxPredictions = model.getTotalClasses();
+
+      const size = 200;
+      webcam = new tmPose.Webcam(size, size, true);
+      await webcam.setup();
+      await webcam.play();
+
+      window.requestAnimationFrame(gameLoop);
+    }
+
+    async function gameLoop() {
+      webcam.update();
+      const { pose, posenetOutput } = await model.estimatePose(webcam.canvas);
+      const prediction = await model.predict(posenetOutput);
+
+      for(let i = 0; i < maxPredictions; i++) {
+        const className = prediction[i].className;
+        const probability = prediction[i].probability.toFixed(2);
+
+        if(className === "up" && probability > 0.75) {
+          hitBall = true;
+        }
+      }
+
+      paddleY = ballY - 50;  // Paddle follows the ball
+
+      ballX += ballSpeedX;
+      ballY += ballSpeedY;
+
+      if(ballY < 0 || ballY > 600) ballSpeedY = -ballSpeedY;
+
+      if(ballX < 0) {
+        if(ballY > paddleY && ballY < paddleY + 100 && hitBall) {
+          ballSpeedX = -ballSpeedX;
+          playerScore++;
+          hitBall = false;
+        }
+        else {
+          cpuScore++;
+          resetBall();
+        }
+      }
+
+      if(ballX > 800) {
+        if(ballY > cpuPaddleY && ballY < cpuPaddleY + 100) {
+          ballSpeedX = -ballSpeedX;
+        }
+        else {
+          playerScore++;
+          resetBall();
+        }
+      }
+
+      cpuPaddleY = ballY - 50;
+
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, 800, 600);
+      ctx.drawImage(paddleImage, 0, paddleY, 20, 100);
+      ctx.drawImage(paddleImage, 790, cpuPaddleY, 20, 100);
+
+      ctx.beginPath();
+      ctx.arc(ballX, ballY, 10, 0, Math.PI*2);
+      ctx.fillStyle = "white";
+      ctx.fill();
+      ctx.closePath();
+
+      document.getElementById("score").innerText = "Player Score: " + playerScore + " | CPU Score: " + cpuScore;
+
+      window.requestAnimationFrame(gameLoop);
+    }
+
+    function resetBall() {
+      ballX = 400;
+      ballY = 300;
+      ballSpeedX = -ballSpeedX;
+    }
+  </script>
+</body>
+</html>
